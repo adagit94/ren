@@ -1,5 +1,5 @@
 export * from "./context"
-export * from "./device"
+export * from "./init"
 export * from "./framer"
 export * from "./ShaderModules/ShaderModules"
 export * from "./Pipelines/Pipelines"
