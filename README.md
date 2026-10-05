@@ -1,3 +1,3 @@
-# glib
+# Ren
 
 Library for computer graphics.
