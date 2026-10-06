@@ -1,4 +1,4 @@
-import { CommonSettings } from "../types/CommonTypes"
+import { CommonSettings } from "../../types/CommonTypes"
 
 export type TShaderModules = Record<string | number, GPUShaderModule>
 

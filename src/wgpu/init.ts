@@ -1,5 +1,5 @@
-import { CodeError, ErrorCode } from "./errors"
-import { SafeTuple } from "./types/ResultType"
+import { CodeError, createCodeErrWithExcep, ErrorCode } from "../errors"
+import { SafeTuple } from "../types"
 
 // restoreLostDevice: boolean;
 
@@ -32,19 +32,32 @@ export const initWgpu = async ({ requestAdapterOptions, getDeviceDescriptor, onD
 
     return [device, null]
   } catch (err) {
-    let message = "WebGPU device request failed."
-    let cause: unknown
-
-    if (err instanceof Error) {
-      message += `\n${err.message}`
-      cause = err.cause
-    }
-
     return [
       null,
-      new CodeError(ErrorCode.WebGpuDeviceRequestFailure, message, {
-        cause,
-      }),
+      createCodeErrWithExcep(ErrorCode.WebGpuDeviceRequestFailure, "WebGPU device request failed.", err)
     ]
   }
 }
+
+export const initView = (canvas: HTMLCanvasElement | OffscreenCanvas, device: GPUDevice, conf: Omit<GPUCanvasConfiguration, "device">) => {
+  try {
+    const ctx = canvas.getContext("webgpu")
+
+    if (!ctx) {
+      return [null, new CodeError(ErrorCode.WebGpuContextFailure, "Canvas context already set or webgpu not supported.")]
+    }
+
+    ctx.configure({
+      ...conf,
+      device,
+      format: conf.format ?? navigator.gpu.getPreferredCanvasFormat(),
+      alphaMode: conf.alphaMode ?? "premultiplied",
+    })
+  } catch (err) {
+    return [null, createCodeErrWithExcep(ErrorCode.WebGpuContextFailure, "WebGPU context retrieval failed.", err)]
+  }
+}
+
+export const createView = (ctx: GPUCanvasContext, descriptor: GPUTextureViewDescriptor) =>
+  ctx.getCurrentTexture().createView(descriptor)
+
