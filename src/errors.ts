@@ -1,11 +1,15 @@
-import { isErr, isPrimitive, isString } from "./assertions"
+import { isErr, isPrimitive } from "./assertions"
 
 export enum ErrorCode {
   WebGpuUnavailable,
   WebGpuAdapterRequestFailure,
   WebGpuDeviceRequestFailure,
   WebGpuContextFailure,
+  WebGpuCreateBufferFailure,
+  WebGpuWriteBufferFailure,
 }
+
+export type CodeMessage = [ErrorCode, string]
 
 export class CodeError extends Error {
   constructor(code: number, message: string, options?: ErrorOptions) {
