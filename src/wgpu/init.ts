@@ -1,5 +1,6 @@
-import { CodeError, createCodeErrWithExcep, ErrorCode } from "../errors"
+import { CodeErr, createCodeErrWithExcep, ErrCode } from "../errors"
 import { RecordOptionals, SafeTuple } from "../types"
+import { safely, safely2 } from "../utils"
 
 // restoreLostDevice: boolean;
 
@@ -11,23 +12,23 @@ type InitDeviceParams = Partial<{
 }>
 
 /**
- * @description Function request's adapter and then device, if appropriate. In case of success, function returns [{@link GPUDevice}, null]. [null, {@link CodeError}] is returned in case of an error.
+ * @description Function request's adapter and then device, if appropriate. In case of success, function returns [{@link GPUDevice}, null]. [null, {@link CodeErr}] is returned in case of an error.
  * @param params - {@link InitDeviceParams}
  * @property params.requestAdapterOptions? - {@link GPURequestAdapterOptions}
  * @property params.getDeviceDescriptor?: (adapterInfo: {@link GpuAdapterInfo}) => {@link GPUDeviceDescriptor} - Function that can be used to configure {@link GPUDeviceDescriptor} appropriately based on the {@link GpuAdapterInfo} received after successfull adapter retrieval.
  * @property params.onDeviceLost?: (info: {@link GPUDeviceLostInfo}) => void - Function to run when {@link GPUDevice} get's lost - e.g. to attempt reinitialization and request {@link GPUDevice} again.
- * @returns [{@link GPUDevice}, null] in case of success or [null, {@link CodeError}] in case of an error.
+ * @returns [{@link GPUDevice}, null] in case of success or [null, {@link CodeErr}] in case of an error.
  */
 export const initDevice = async ({
   requestAdapterOptions,
   getDeviceDescriptor,
   onDeviceLost,
 }: InitDeviceParams = {}): Promise<SafeTuple<GPUDevice>> => {
-  if (!navigator.gpu) [null, new CodeError(ErrorCode.WebGpuUnavailable, "WebGPU unavailable.")]
+  if (!navigator.gpu) [null, new CodeErr(ErrCode.WebGpuUnavailable, "WebGPU unavailable.")]
 
   const adapter = await navigator.gpu.requestAdapter(requestAdapterOptions)
 
-  if (!adapter) return [null, new CodeError(ErrorCode.WebGpuAdapterRequestFailure, "WebGPU adapter request failed.")]
+  if (!adapter) return [null, new CodeErr(ErrCode.WebGpuAdapterRequestFailure, "WebGPU adapter request failed.")]
 
   try {
     const device = await adapter.requestDevice(getDeviceDescriptor?.(adapter))
@@ -39,7 +40,7 @@ export const initDevice = async ({
 
     return [device, null]
   } catch (err) {
-    return [null, createCodeErrWithExcep(ErrorCode.WebGpuDeviceRequestFailure, "WebGPU device request failed.", err)]
+    return [null, createCodeErrWithExcep(ErrCode.WebGpuDeviceRequestFailure, "WebGPU device request failed.", err)]
   }
 }
 
@@ -52,10 +53,7 @@ export const initContext = (
     const ctx = canvas.getContext("webgpu")
 
     if (!ctx) {
-      return [
-        null,
-        new CodeError(ErrorCode.WebGpuContextFailure, "Canvas context already set or webgpu not supported."),
-      ]
+      return [null, new CodeErr(ErrCode.WebGpuContextFailure, "Canvas context already set or webgpu not supported.")]
     }
 
     try {
@@ -67,41 +65,87 @@ export const initContext = (
 
       return [ctx, null]
     } catch (err) {
-      return [null, createCodeErrWithExcep(ErrorCode.WebGpuContextFailure, "WebGPU context configuration failed.", err)]
+      return [null, createCodeErrWithExcep(ErrCode.WebGpuContextFailure, "WebGPU context configuration failed.", err)]
     }
   } catch (err) {
-    return [null, createCodeErrWithExcep(ErrorCode.WebGpuContextFailure, "WebGPU context retrieval failed.", err)]
+    return [null, createCodeErrWithExcep(ErrCode.WebGpuContextFailure, "WebGPU context retrieval failed.", err)]
   }
 }
 
 const [d] = await initDevice()
 
-// export const 
+if (d) {
+  // d.createCommandEncoder()
+}
 
-export const writeBuffer = (
-  device: GPUDevice,
+type WgpuConf = {
+  device: InitDeviceParams
+}
+
+type Wgpu = {
+  device: GPUDevice
+  encoder: GPUCommandEncoder
+}
+
+const init = async (conf: WgpuConf): Promise<SafeTuple<Wgpu>> => {
+  const [dev, devErr] = await initDevice(conf.device)
+
+  if (devErr !== null) return [null, devErr]
+
+  const enc = dev.createCommandEncoder()
+
+  return [
+    {
+      device: dev,
+      encoder: enc,
+    },
+    null,
+  ]
+}
+
+// export const
+
+export const writeData = (
+  dev: GPUDevice,
+  enc: GPUCommandEncoder,
   buff: GPUBuffer,
   data: AllowSharedBufferSource,
   { bufferOffset = 0 }: Partial<{ bufferOffset: number }> = {},
 ): SafeTuple<GPUBuffer> => {
-  const overflow = data.byteLength - (buff.size - bufferOffset)
+  const buffOverflow = data.byteLength - (buff.size - bufferOffset)
 
-  if (overflow > 0) {
-    const [newBuff, err] = createBuffer(device, { size: buff.size + overflow, usage: buff.usage, label: buff.label})
+  if (buffOverflow > 0) {
+    const [newBuff, err] = reallocBuff(dev, enc, buff, buff.size + buffOverflow)
 
     if (err) return [null, err]
-
-    // device.co
-    device.queue.writeBuffer(buff, bufferOffset, data)
     buff = newBuff
   }
 
-  try {
-    device.queue.writeBuffer(buff, bufferOffset, data)
+  return safely(
+    () => {
+      dev.queue.writeBuffer(buff, bufferOffset, data)
+      return buff
+    },
+    (err) => createCodeErrWithExcep(ErrCode.WebGpuWriteBufferFailure, "WebGPU buffer write operation failed.", err),
+  )
+}
 
-    return [buff, null]
+const reallocBuff = (
+  dev: GPUDevice,
+  enc: GPUCommandEncoder,
+  origBuff: GPUBuffer,
+  newSize: number,
+): SafeTuple<GPUBuffer> => {
+  try {
+    const newBuff = dev.createBuffer({ size: newSize, usage: origBuff.usage, label: origBuff.label })
+
+    enc.copyBufferToBuffer(origBuff, newBuff)
+    return [newBuff, null]
   } catch (err) {
-    return [null, createCodeErrWithExcep(ErrorCode.WebGpuWriteBufferFailure, "WebGPU buffer write operation failed.", err)]
+    return [
+      null,
+      createCodeErrWithExcep(ErrCode.WebGpuBufferReallocationFailure, "WebGPU buffer reallocation failed.", err),
+    ]
   }
 }
 
@@ -145,7 +189,7 @@ export const createBuffer = (
 
     return [buff, null]
   } catch (err) {
-    return [null, createCodeErrWithExcep(ErrorCode.WebGpuCreateBufferFailure, "WebGPU buffer creation failed.", err)]
+    return [null, createCodeErrWithExcep(ErrCode.WebGpuCreateBufferFailure, "WebGPU buffer creation failed.", err)]
   }
 }
 

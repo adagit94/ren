@@ -1,17 +1,20 @@
 import { isErr, isPrimitive } from "./assertions"
 
-export enum ErrorCode {
+export enum ErrCode {
   WebGpuUnavailable,
   WebGpuAdapterRequestFailure,
   WebGpuDeviceRequestFailure,
   WebGpuContextFailure,
   WebGpuCreateBufferFailure,
   WebGpuWriteBufferFailure,
+  WebGpuBufferReallocationFailure,
 }
 
-export type CodeMessage = [ErrorCode, string]
+export type CodeMessage = [ErrCode, string]
 
-export class CodeError extends Error {
+export type OnErr = (err: unknown) => CodeErr
+
+export class CodeErr extends Error {
   constructor(code: number, message: string, options?: ErrorOptions) {
     super(message, options)
     this.code = code
@@ -21,10 +24,10 @@ export class CodeError extends Error {
 }
 
 export const createCodeErrWithExcep = (
-  code: ErrorCode,
+  code: ErrCode,
   msgBase: string,
   excep: unknown,
-): CodeError => {
+): CodeErr => {
   let message = msgBase
   let cause: unknown
 
@@ -35,7 +38,7 @@ export const createCodeErrWithExcep = (
     message += `\n${excep}`
   }
 
-  return new CodeError(code, message, {
+  return new CodeErr(code, message, {
     cause,
   })
 }
