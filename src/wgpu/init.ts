@@ -72,12 +72,6 @@ export const initContext = (
   }
 }
 
-const [d] = await initDevice()
-
-if (d) {
-  // d.createCommandEncoder()
-}
-
 type WgpuConf = {
   device: InitDeviceParams
 }
@@ -94,6 +88,9 @@ const init = async (conf: WgpuConf): Promise<SafeTuple<Wgpu>> => {
 
   const enc = dev.createCommandEncoder()
 
+  dev.createBindGroup
+  // dev.createBindGroupLayout({entries: })
+
   return [
     {
       device: dev,
@@ -103,106 +100,7 @@ const init = async (conf: WgpuConf): Promise<SafeTuple<Wgpu>> => {
   ]
 }
 
-// export const
 
-export const writeData = (
-  dev: GPUDevice,
-  enc: GPUCommandEncoder,
-  buff: GPUBuffer,
-  data: AllowSharedBufferSource,
-  { bufferOffset = 0 }: Partial<{ bufferOffset: number }> = {},
-): SafeTuple<GPUBuffer> => {
-  const buffOverflow = data.byteLength - (buff.size - bufferOffset)
-
-  if (buffOverflow > 0) {
-    const [newBuff, err] = reallocBuff(dev, enc, buff, buff.size + buffOverflow)
-
-    if (err) return [null, err]
-    buff = newBuff
-  }
-
-  return safely(
-    () => {
-      dev.queue.writeBuffer(buff, bufferOffset, data)
-      return buff
-    },
-    (err) => createCodeErrWithExcep(ErrCode.WebGpuWriteBufferFailure, "WebGPU buffer write operation failed.", err),
-  )
-}
-
-const reallocBuff = (
-  dev: GPUDevice,
-  enc: GPUCommandEncoder,
-  origBuff: GPUBuffer,
-  newSize: number,
-): SafeTuple<GPUBuffer> => {
-  try {
-    const newBuff = dev.createBuffer({ size: newSize, usage: origBuff.usage, label: origBuff.label })
-
-    enc.copyBufferToBuffer(origBuff, newBuff)
-    return [newBuff, null]
-  } catch (err) {
-    return [
-      null,
-      createCodeErrWithExcep(ErrCode.WebGpuBufferReallocationFailure, "WebGPU buffer reallocation failed.", err),
-    ]
-  }
-}
-
-export const createVertexBuffer = (device: GPUDevice, data: Float32Array = new Float32Array()): GPUBuffer => {
-  const buff = device.createBuffer({
-    size: data.byteLength,
-    usage:
-      GPUBufferUsage.VERTEX |
-      GPUBufferUsage.COPY_SRC |
-      GPUBufferUsage.COPY_DST |
-      GPUBufferUsage.MAP_READ |
-      GPUBufferUsage.MAP_WRITE,
-  })
-
-  device.queue.writeBuffer(buff, 0, data)
-
-  return buff
-}
-
-const UNI_BUFFER_USAGE =
-  GPUBufferUsage.COPY_SRC |
-  GPUBufferUsage.COPY_DST |
-  GPUBufferUsage.INDEX |
-  GPUBufferUsage.MAP_READ |
-  GPUBufferUsage.MAP_WRITE |
-  GPUBufferUsage.STORAGE |
-  GPUBufferUsage.UNIFORM |
-  GPUBufferUsage.VERTEX |
-  GPUBufferUsage.QUERY_RESOLVE |
-  GPUBufferUsage.INDIRECT
-
-export const createBuffer = (
-  device: GPUDevice,
-  settings: RecordOptionals<GPUBufferDescriptor, "usage">,
-): SafeTuple<GPUBuffer> => {
-  try {
-    const buff = device.createBuffer({
-      ...settings,
-      usage: settings.usage ?? UNI_BUFFER_USAGE,
-    })
-
-    return [buff, null]
-  } catch (err) {
-    return [null, createCodeErrWithExcep(ErrCode.WebGpuCreateBufferFailure, "WebGPU buffer creation failed.", err)]
-  }
-}
-
-export const updateBuffer = async (
-  buff: GPUBuffer,
-  mapMode: GPUMapModeFlags,
-  mapper: (buff: ArrayBuffer) => void,
-  { offset, length }: Partial<{ offset: GPUSize64; length: GPUSize64 }> = {},
-) => {
-  await buff.mapAsync(mapMode, offset, length)
-  mapper(buff.getMappedRange(offset, length))
-  buff.unmap()
-}
 
 export const createView = (ctx: GPUCanvasContext, descriptor: GPUTextureViewDescriptor) =>
   ctx.getCurrentTexture().createView(descriptor)

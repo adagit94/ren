@@ -23,6 +23,3 @@ type Rec = RecordOptionals<{ a: number; b: string }, "b"> // { a: number; b?: st
 */
 export type RecordOptionals<R extends object, Ks extends keyof R> = Omit<R, Ks> &
   Partial<Pick<R, Ks>>
-
-interface T { a: number }
-type T2 = RecordOptionals<T, "a">
